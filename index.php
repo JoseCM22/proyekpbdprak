@@ -38,7 +38,7 @@
         <a href="vendor.php" class="btn-menu">Data Vendor</a>
         <a href="user.php" class="btn-menu">Data User Pegawai</a>
         <a href="barang.php" class="btn-menu">Data Barang</a>
-        <a href="margin.php" class="btn-menu">Data Margin</a>
+        <a href="margin_penjualan.php" class="btn-menu">Data Margin</a>
     </div>
 
 </body>
