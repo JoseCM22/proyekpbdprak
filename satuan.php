@@ -1,62 +1,91 @@
 <?php
-require 'dbconnection.php';
+include_once("bootstrap.php");
 
-if (isset($_GET['delete'])) {
-    $stmt = $pdo->prepare("DELETE FROM satuan WHERE idsatuan = ?");
-    $stmt->execute([$_GET['delete']]);
-    header("Location: satuan.php"); exit;
-}
+try {
+    $db = new DBconnection();
+    $satuanModel = new SatuanModel($db);
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $nama = $_POST['nama_satuan'];
-    $status = $_POST['status'];
-    if (!empty($_POST['idsatuan'])) {
-        $stmt = $pdo->prepare("UPDATE satuan SET nama_satuan = ?, status = ? WHERE idsatuan = ?");
-        $stmt->execute([$nama, $status, $_POST['idsatuan']]);
-    } else {
-        $stmt = $pdo->prepare("INSERT INTO satuan (nama_satuan, status) VALUES (?, ?)");
-        $stmt->execute([$nama, $status]);
+    if (isset($_GET['delete'])) {
+        $res = $satuanModel->delete((int) $_GET['delete']);
+        Flash::set($res->status ? "Satuan berhasil dihapus." : "Gagal: " . $res->message, $res->status ? 'success' : 'error');
+        header("Location: satuan.php"); exit;
     }
-    header("Location: satuan.php"); exit;
-}
 
-$editData = null;
-if (isset($_GET['edit'])) {
-    $stmt = $pdo->prepare("SELECT * FROM satuan WHERE idsatuan = ?");
-    $stmt->execute([$_GET['edit']]);
-    $editData = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $id = $_POST['idsatuan'] ?? '';
+        $res = !empty($id) 
+            ? $satuanModel->update((int) $id, $_POST) 
+            : $satuanModel->insert($_POST);
+
+        Flash::set($res->status ? "Data satuan berhasil disimpan." : "Gagal: " . $res->message, $res->status ? 'success' : 'error');
+        header("Location: satuan.php"); exit;
+    }
+
+    $editData     = isset($_GET['edit']) ? $satuanModel->find_by_id((int) $_GET['edit']) : null;
+    $daftarSatuan = $satuanModel->find_all(); // Membaca dari vu_master_satuan
+
+} catch (DatabaseException $e) {
+    die("Kesalahan Sistem: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
 <html lang="id">
-<head><title>Satuan</title><style>body{font-family:sans-serif;} table, th, td {border: 1px solid black; border-collapse: collapse; padding: 5px;}</style></head>
+<head>
+    <meta charset="UTF-8">
+    <title>Data Satuan - <?= Konfigurasi::APP_NAME ?></title>
+</head>
 <body>
-    <a href="index.php">⬅ Kembali ke Dashboard</a>
-    <h2>Manajemen Satuan</h2>
-    <form method="POST">
-        <input type="hidden" name="idsatuan" value="<?= $editData['idsatuan'] ?? '' ?>">
-        Nama: <input type="text" name="nama_satuan" value="<?= $editData['nama_satuan'] ?? '' ?>" required>
-        Status: 
-        <select name="status">
-            <option value="1" <?= (isset($editData['status']) && $editData['status'] == 1) ? 'selected' : '' ?>>Aktif (1)</option>
-            <option value="0" <?= (isset($editData['status']) && $editData['status'] == 0) ? 'selected' : '' ?>>Nonaktif (0)</option>
-        </select>
-        <button type="submit">Simpan</button>
-    </form>
-    <br>
-    <table>
-        <tr><th>Satuan ID</th><th>Satuan</th><th>Status</th><th>Aksi</th></tr>
-        <?php
-        $stmtTampil = $pdo->query("SELECT * FROM vu_master_satuan");
-        while ($row = $stmtTampil->fetch(PDO::FETCH_ASSOC)) {
-            echo "<tr>
-                    <td>{$row['Satuan ID']}</td>
-                    <td>{$row['Satuan']}</td>
-                    <td>{$row['Status']}</td>
-                    <td><a href='?edit={$row['Satuan ID']}'>Edit</a> | <a href='?delete={$row['Satuan ID']}'>Delete</a></td>
-                  </tr>";
-        }
-        ?>
-    </table>
+
+    <?php include_once("sidebar.php"); ?>
+
+    <div class="main-content">
+        <div class="page-header">
+            <h2>Manajemen Data Satuan</h2>
+        </div>
+
+        <?php Flash::tampilkan(); ?>
+
+        <div class="card-form">
+            <form method="POST">
+                <input type="hidden" name="idsatuan" value="<?= $editData['idsatuan'] ?? '' ?>">
+                
+                <label>Nama Satuan:</label>
+                <input type="text" name="nama_satuan" placeholder="Contoh: Unit, Pcs, Box" value="<?= htmlspecialchars($editData['nama_satuan'] ?? '') ?>" required>
+                
+                <label>Status:</label>
+                <select name="status" required>
+                    <option value="1" <?= ($editData['status'] ?? 1) == 1 ? 'selected' : '' ?>>Aktif</option>
+                    <option value="0" <?= isset($editData['status']) && $editData['status'] == 0 ? 'selected' : '' ?>>Non-Aktif</option>
+                </select>
+
+                <button type="submit"><?= $editData ? 'Update Satuan' : 'Simpan Satuan' ?></button>
+                <?php if ($editData): ?>
+                    <p style="text-align:center; margin-bottom:0;"><a href="satuan.php" style="color:#dc3545;">Batal Edit</a></p>
+                <?php endif; ?>
+            </form>
+        </div>
+
+        <table>
+            <tr>
+                <th>ID Satuan</th>
+                <th>Nama Satuan</th>
+                <th>Status</th>
+                <th>Aksi</th>
+            </tr>
+            <?php foreach ($daftarSatuan as $row): ?>
+            <tr>
+                <td><?= $row['Satuan ID'] ?? $row['idsatuan'] ?></td>
+                <td><?= htmlspecialchars($row['Satuan'] ?? $row['nama_satuan']) ?></td>
+                <td><?= $row['Status'] ?? ($row['status'] == 1 ? 'Aktif' : 'Non-Aktif') ?></td>
+                <td class="aksi">
+                    <?php $idRow = $row['Satuan ID'] ?? $row['idsatuan']; ?>
+                    <a href="?edit=<?= $idRow ?>" class="edit">Edit</a> | 
+                    <a href="?delete=<?= $idRow ?>" class="delete" onclick="return confirm('Yakin hapus satuan ini?')">Delete</a>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        </table>
+    </div>
+
 </body>
 </html>

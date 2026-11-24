@@ -1,69 +1,101 @@
 <?php
-require 'dbconnection.php';
+include_once("bootstrap.php");
 
-if (isset($_GET['delete'])) {
-    $stmt =$pdo->prepare("DELETE FROM `user` WHERE iduser = ?");
-    $stmt->execute([$_GET['delete']]);
-    header("Location: user.php"); exit;
-}
+try {
+    $db = new DBconnection();
+    $userModel = new UserModel($db);
+    $roleModel = new RoleModel($db);
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $uname =$_POST['username'];
-    $pass =$_POST['password'];
-    $role =$_POST['idrole'];
-    if (!empty($_POST['iduser'])) {
-        $stmt =$pdo->prepare("UPDATE `user` SET username = ?, `password` = ?, idrole = ? WHERE iduser = ?");
-        $stmt->execute([$uname,$pass, $role,$_POST['iduser']]);
-    } else {
-        $stmt =$pdo->prepare("INSERT INTO `user` (username, `password`, idrole) VALUES (?, ?, ?)");
-        $stmt->execute([$uname, $pass,$role]);
+    if (isset($_GET['delete'])) {
+        $res = $userModel->delete((int) $_GET['delete']);
+        Flash::set($res->status ? "User berhasil dihapus." : "Gagal: " . $res->message, $res->status ? 'success' : 'error');
+        header("Location: user.php"); exit;
     }
-    header("Location: user.php"); exit;
-}
 
-$editData = null;
-if (isset($_GET['edit'])) {
-    $stmt =$pdo->prepare("SELECT * FROM `user` WHERE iduser = ?");
-    $stmt->execute([$_GET['edit']]);
-    $editData =$stmt->fetch(PDO::FETCH_ASSOC);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $id = $_POST['iduser'] ?? '';
+        $res = !empty($id) 
+            ? $userModel->update((int) $id, $_POST) 
+            : $userModel->insert($_POST);
+
+        Flash::set($res->status ? "Data user berhasil disimpan." : "Gagal: " . $res->message, $res->status ? 'success' : 'error');
+        header("Location: user.php"); exit;
+    }
+
+    $editData   = isset($_GET['edit']) ? $userModel->find_by_id((int) $_GET['edit']) : null;
+    $daftarUser = $userModel->find_all(); // Membaca dari vu_master_user
+    $daftarRole = $roleModel->find_all(); // Untuk dropdown Role
+
+} catch (DatabaseException $e) {
+    die("Kesalahan Sistem: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
 <html lang="id">
-<head><title>User</title><style>body{font-family:sans-serif;} table, th, td {border: 1px solid black; border-collapse: collapse; padding: 5px;}</style></head>
+<head>
+    <meta charset="UTF-8">
+    <title>Data User - <?= Konfigurasi::APP_NAME ?></title>
+</head>
 <body>
-    <a href="index.php">⬅ Kembali ke Dashboard</a>
-    <h2>Manajemen User</h2>
-    <form method="POST">
-        <input type="hidden" name="iduser" value="<?= $editData['iduser'] ?? '' ?>">
-        Username: <input type="text" name="username" value="<?= $editData['username'] ?? '' ?>" required>
-        Password: <input type="password" name="password" value="<?= $editData['password'] ?? '' ?>" required>
-        Role: 
-        <select name="idrole" required>
-            <?php
-            $roleStmt =$pdo->query("SELECT * FROM `role`");
-            while ($r =$roleStmt->fetch(PDO::FETCH_ASSOC)) {
-                $sel = (isset($editData['idrole']) && $editData['idrole'] ==$r['idrole']) ? 'selected' : '';
-                echo "<option value='{$r['idrole']}' $sel>{$r['nama_role']}</option>";
-            }
-            ?>
-        </select>
-        <button type="submit">Simpan</button>
-    </form>
-    <br>
-    <table>
-        <tr><th>ID Pegawai</th><th>Pegawai</th><th>Role</th><th>Aksi</th></tr>
-        <?php
-        $stmtTampil =$pdo->query("SELECT * FROM vu_master_user");
-        while ($row =$stmtTampil->fetch(PDO::FETCH_ASSOC)) {
-            echo "<tr>
-                    <td>{$row['ID Pegawai']}</td>
-                    <td>{$row['Pegawai']}</td>
-                    <td>{$row['Role']}</td>
-                    <td><a href='?edit={$row['ID Pegawai']}'>Edit</a> <a href='?delete={$row['ID Pegawai']}'>Delete</a></td>
-                  </tr>";
-        }
-        ?>
-    </table>
+
+    <?php include_once("sidebar.php"); ?>
+
+    <div class="main-content">
+        <div class="page-header">
+            <h2>Manajemen Data User</h2>
+        </div>
+
+        <?php Flash::tampilkan(); ?>
+
+        <div class="card-form">
+            <form method="POST">
+                <input type="hidden" name="iduser" value="<?= $editData['iduser'] ?? '' ?>">
+                
+                <label>Username:</label>
+                <input type="text" name="username" value="<?= htmlspecialchars($editData['username'] ?? '') ?>" required>
+                
+                <label>Password <?= $editData ? '(Kosongkan jika tidak ingin diubah)' : '' ?>:</label>
+                <input type="password" name="password" <?= $editData ? '' : 'required' ?>>
+
+                <label>Role:</label>
+                <select name="idrole" required>
+                    <option value="">-- Pilih Role --</option>
+                    <?php foreach ($daftarRole as $r): ?>
+                        <?php $rId = $r['Role ID'] ?? $r['idrole']; $rNama = $r['Role'] ?? $r['nama_role']; ?>
+                        <option value="<?= $rId ?>" <?= ($editData['idrole'] ?? '') == $rId ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($rNama) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <button type="submit"><?= $editData ? 'Update User' : 'Simpan User' ?></button>
+                <?php if ($editData): ?>
+                    <p style="text-align:center; margin-bottom:0;"><a href="user.php" style="color:#dc3545;">Batal Edit</a></p>
+                <?php endif; ?>
+            </form>
+        </div>
+
+        <table>
+            <tr>
+                <th>ID User</th>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Aksi</th>
+            </tr>
+            <?php foreach ($daftarUser as $row): ?>
+            <tr>
+                <td><?= $row['ID Pegawai'] ?? $row['iduser'] ?></td>
+                <td><?= htmlspecialchars($row['Pegawai'] ?? $row['username']) ?></td>
+                <td><?= htmlspecialchars($row['Role'] ?? $row['nama_role'] ?? '-') ?></td>
+                <td class="aksi">
+                    <?php $idRow = $row['ID Pegawai'] ?? $row['iduser']; ?>
+                    <a href="?edit=<?= $idRow ?>" class="edit">Edit</a> | 
+                    <a href="?delete=<?= $idRow ?>" class="delete" onclick="return confirm('Yakin hapus user ini?')">Delete</a>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        </table>
+    </div>
+
 </body>
 </html>

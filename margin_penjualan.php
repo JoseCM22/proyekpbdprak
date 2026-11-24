@@ -1,76 +1,91 @@
 <?php
-require 'dbconnection.php';
+include_once("bootstrap.php");
 
-if (isset($_GET['delete'])) {
-    $stmt =$pdo->prepare("DELETE FROM margin_penjualan WHERE idmargin_penjualan = ?");
-    $stmt->execute([$_GET['delete']]);
-    header("Location: margin_penjualan.php"); exit;
-}
+try {
+    $db = new DBconnection();
+    $marginModel = new MarginModel($db);
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $persen =$_POST['persen'];
-    $status =$_POST['status'];
-    $iduser =$_POST['iduser'];
-    
-    if (!empty($_POST['idmargin_penjualan'])) {
-        // Menggunakan NOW() untuk memperbarui updated_at
-        $stmt =$pdo->prepare("UPDATE margin_penjualan SET persen = ?, STATUS = ?, iduser = ?, updated_at = NOW() WHERE idmargin_penjualan = ?");
-        $stmt->execute([$persen,$status, $iduser,$_POST['idmargin_penjualan']]);
-    } else {
-        // Menggunakan NOW() untuk created_at dan updated_at saat insert
-        $stmt =$pdo->prepare("INSERT INTO margin_penjualan (created_at, persen, STATUS, iduser, updated_at) VALUES (NOW(), ?, ?, ?, NOW())");
-        $stmt->execute([$persen, $status,$iduser]);
+    if (isset($_GET['delete'])) {
+        $res = $marginModel->delete((int) $_GET['delete']);
+        Flash::set($res->status ? "Margin berhasil dihapus." : "Gagal: " . $res->message, $res->status ? 'success' : 'error');
+        header("Location: margin_penjualan.php"); exit;
     }
-    header("Location: margin_penjualan.php"); exit;
-}
 
-$editData = null;
-if (isset($_GET['edit'])) {
-    $stmt =$pdo->prepare("SELECT * FROM margin_penjualan WHERE idmargin_penjualan = ?");
-    $stmt->execute([$_GET['edit']]);
-    $editData =$stmt->fetch(PDO::FETCH_ASSOC);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $id = $_POST['idmargin_penjualan'] ?? '';
+        $res = !empty($id) 
+            ? $marginModel->update((int) $id, $_POST) 
+            : $marginModel->insert($_POST);
+
+        Flash::set($res->status ? "Data margin berhasil disimpan." : "Gagal: " . $res->message, $res->status ? 'success' : 'error');
+        header("Location: margin_penjualan.php"); exit;
+    }
+
+    $editData     = isset($_GET['edit']) ? $marginModel->find_by_id((int) $_GET['edit']) : null;
+    $daftarMargin = $marginModel->find_all(); // Membaca dari vu_master_marginP
+
+} catch (DatabaseException $e) {
+    die("Kesalahan Sistem: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
 <html lang="id">
-<head><title>Margin Penjualan</title><style>body{font-family:sans-serif;} table, th, td {border: 1px solid black; border-collapse: collapse; padding: 5px;}</style></head>
+<head>
+    <meta charset="UTF-8">
+    <title>Data Margin Penjualan - <?= Konfigurasi::APP_NAME ?></title>
+</head>
 <body>
-    <a href="index.php">⬅ Kembali ke Dashboard</a>
-    <h2>Manajemen Margin Penjualan</h2>
-    <form method="POST">
-        <input type="hidden" name="idmargin_penjualan" value="<?= $editData['idmargin_penjualan'] ?? '' ?>">
-        Persen (Gunakan desimal, misal 0.10): <input type="text" name="persen" value="<?= $editData['persen'] ?? '' ?>" required>
-        Status: 
-        <select name="status">
-            <option value="1" <?= (isset($editData['STATUS']) &&$editData['STATUS'] == 1) ? 'selected' : '' ?>>Aktif (1)</option>
-            <option value="0" <?= (isset($editData['STATUS']) &&$editData['STATUS'] == 0) ? 'selected' : '' ?>>Nonaktif (0)</option>
-        </select>
-        Pilih Pegawai (User ID):
-        <select name="iduser" required>
-            <?php
-            $usrStmt =$pdo->query("SELECT * FROM `user`");
-            while ($u =$usrStmt->fetch(PDO::FETCH_ASSOC)) {
-                $sel = (isset($editData['iduser']) && $editData['iduser'] ==$u['iduser']) ? 'selected' : '';
-                echo "<option value='{$u['iduser']}' $sel>{$u['username']}</option>";
-            }
-            ?>
-        </select>
-        <button type="submit">Simpan</button>
-    </form>
-    <br>
-    <table>
-        <tr><th>Margin ID</th><th>Margin</th><th>Status</th><th>Aksi</th></tr>
-        <?php
-        $stmtTampil =$pdo->query("SELECT * FROM vu_master_marginP");
-        while ($row =$stmtTampil->fetch(PDO::FETCH_ASSOC)) {
-            echo "<tr>
-                    <td>{$row['Margin ID']}</td>
-                    <td>{$row['Margin']}</td>
-                    <td>{$row['Status']}</td>
-                    <td><a href='?edit={$row['Margin ID']}'>Edit</a> <a href='?delete={$row['Margin ID']}'>Delete</a></td>
-                  </tr>";
-        }
-        ?>
-    </table>
+
+    <?php include_once("sidebar.php"); ?>
+
+    <div class="main-content">
+        <div class="page-header">
+            <h2>Manajemen Margin Penjualan</h2>
+        </div>
+
+        <?php Flash::tampilkan(); ?>
+
+        <div class="card-form">
+            <form method="POST">
+                <input type="hidden" name="idmargin_penjualan" value="<?= $editData['idmargin_penjualan'] ?? '' ?>">
+                
+                <label>Persentase Margin (%):</label>
+                <input type="number" step="0.01" name="persen" placeholder="Contoh: 10.5" value="<?= $editData['persen'] ?? '' ?>" required>
+
+                <label>Status Margin:</label>
+                <select name="status" required>
+                    <option value="1" <?= ($editData['STATUS'] ?? $editData['status'] ?? 1) == 1 ? 'selected' : '' ?>>Aktif</option>
+                    <option value="0" <?= (isset($editData['STATUS']) && $editData['STATUS'] == 0) || (isset($editData['status']) && $editData['status'] == 0) ? 'selected' : '' ?>>Non-Aktif</option>
+                </select>
+
+                <button type="submit"><?= $editData ? 'Update Margin' : 'Simpan Margin' ?></button>
+                <?php if ($editData): ?>
+                    <p style="text-align:center; margin-bottom:0;"><a href="margin_penjualan.php" style="color:#dc3545;">Batal Edit</a></p>
+                <?php endif; ?>
+            </form>
+        </div>
+
+        <table>
+            <tr>
+                <th>ID Margin</th>
+                <th>Persen (%)</th>
+                <th>Status</th>
+                <th>Aksi</th>
+            </tr>
+            <?php foreach ($daftarMargin as $row): ?>
+            <tr>
+                <td><?= $row['Margin ID'] ?? $row['idmargin_penjualan'] ?></td>
+                <td><?= $row['Margin'] ?? $row['persen'] ?>%</td>
+                <td><?= $row['Status'] ?? (($row['STATUS'] ?? $row['status']) == 1 ? 'Aktif' : 'Non-Aktif') ?></td>
+                <td class="aksi">
+                    <?php $idRow = $row['Margin ID'] ?? $row['idmargin_penjualan']; ?>
+                    <a href="?edit=<?= $idRow ?>" class="edit">Edit</a> | 
+                    <a href="?delete=<?= $idRow ?>" class="delete" onclick="return confirm('Yakin hapus margin ini?')">Delete</a>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        </table>
+    </div>
+
 </body>
 </html>

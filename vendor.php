@@ -1,70 +1,100 @@
 <?php
-require 'dbconnection.php';
+include_once("bootstrap.php");
 
-if (isset($_GET['delete'])) {
-    $stmt = $pdo->prepare("DELETE FROM vendor WHERE idvendor = ?");
-    $stmt->execute([$_GET['delete']]);
-    header("Location: vendor.php"); exit;
-}
+try {
+    $db = new DBconnection();
+    $vendorModel = new VendorModel($db);
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $nama = $_POST['nama_vendor'];
-    $bh = $_POST['badan_hukum'];
-    $status = $_POST['status'];
-    if (!empty($_POST['idvendor'])) {
-        $stmt = $pdo->prepare("UPDATE vendor SET nama_vendor = ?, badan_hukum = ?, status = ? WHERE idvendor = ?");
-        $stmt->execute([$nama, $bh, $status, $_POST['idvendor']]);
-    } else {
-        $stmt = $pdo->prepare("INSERT INTO vendor (nama_vendor, badan_hukum, status) VALUES (?, ?, ?)");
-        $stmt->execute([$nama, $bh, $status]);
+    if (isset($_GET['delete'])) {
+        $res = $vendorModel->delete((int) $_GET['delete']);
+        Flash::set($res->status ? "Vendor berhasil dihapus." : "Gagal: " . $res->message, $res->status ? 'success' : 'error');
+        header("Location: vendor.php"); exit;
     }
-    header("Location: vendor.php"); exit;
-}
 
-$editData = null;
-if (isset($_GET['edit'])) {
-    $stmt = $pdo->prepare("SELECT * FROM vendor WHERE idvendor = ?");
-    $stmt->execute([$_GET['edit']]);
-    $editData = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $id = $_POST['idvendor'] ?? '';
+        $res = !empty($id) 
+            ? $vendorModel->update((int) $id, $_POST) 
+            : $vendorModel->insert($_POST);
+
+        Flash::set($res->status ? "Data vendor berhasil disimpan." : "Gagal: " . $res->message, $res->status ? 'success' : 'error');
+        header("Location: vendor.php"); exit;
+    }
+
+    $editData     = isset($_GET['edit']) ? $vendorModel->find_by_id((int) $_GET['edit']) : null;
+    $daftarVendor = $vendorModel->find_all(); // Membaca dari vu_master_vendor
+
+} catch (DatabaseException $e) {
+    die("Kesalahan Sistem: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
 <html lang="id">
-<head><title>Vendor</title><style>body{font-family:sans-serif;} table, th, td {border: 1px solid black; border-collapse: collapse; padding: 5px;}</style></head>
+<head>
+    <meta charset="UTF-8">
+    <title>Data Vendor - <?= Konfigurasi::APP_NAME ?></title>
+</head>
 <body>
-    <a href="index.php">⬅ Kembali ke Dashboard</a>
-    <h2>Manajemen Vendor</h2>
-    <form method="POST">
-        <input type="hidden" name="idvendor" value="<?= $editData['idvendor'] ?? '' ?>">
-        Nama Vendor: <input type="text" name="nama_vendor" value="<?= $editData['nama_vendor'] ?? '' ?>" required>
-        Badan Hukum: 
-        <select name="badan_hukum">
-            <option value="P" <?= (isset($editData['badan_hukum']) && $editData['badan_hukum'] == 'P') ? 'selected' : '' ?>>PT (P)</option>
-            <option value="C" <?= (isset($editData['badan_hukum']) && $editData['badan_hukum'] == 'C') ? 'selected' : '' ?>>CV (C)</option>
-            <option value="I" <?= (isset($editData['badan_hukum']) && $editData['badan_hukum'] == 'I') ? 'selected' : '' ?>>Individu (I)</option>
-        </select>
-        Status: 
-        <select name="status">
-            <option value="A" <?= (isset($editData['status']) && $editData['status'] == 'A') ? 'selected' : '' ?>>Aktif (A)</option>
-            <option value="N" <?= (isset($editData['status']) && $editData['status'] == 'N') ? 'selected' : '' ?>>Nonaktif (N)</option>
-        </select>
-        <button type="submit">Simpan</button>
-    </form>
-    <br>
-    <table>
-        <tr><th>Vendor ID</th><th>Company</th><th>Badan Hukum</th><th>Status</th><th>Aksi</th></tr>
-        <?php
-        $stmtTampil = $pdo->query("SELECT * FROM vu_master_vendor");
-        while ($row = $stmtTampil->fetch(PDO::FETCH_ASSOC)) {
-            echo "<tr>
-                    <td>{$row['Vendor ID']}</td>
-                    <td>{$row['Company']}</td>
-                    <td>{$row['Badan Hukum']}</td>
-                    <td>{$row['Status']}</td>
-                    <td><a href='?edit={$row['Vendor ID']}'>Edit</a> | <a href='?delete={$row['Vendor ID']}'>Delete</a></td>
-                  </tr>";
-        }
-        ?>
-    </table>
+
+    <?php include_once("sidebar.php"); ?>
+
+    <div class="main-content">
+        <div class="page-header">
+            <h2>Manajemen Data Vendor</h2>
+        </div>
+
+        <?php Flash::tampilkan(); ?>
+
+        <div class="card-form">
+            <form method="POST">
+                <input type="hidden" name="idvendor" value="<?= $editData['idvendor'] ?? '' ?>">
+                
+                <label>Nama Vendor:</label>
+                <input type="text" name="nama_vendor" placeholder="Contoh: PT. Astra Elektronik" value="<?= htmlspecialchars($editData['nama_vendor'] ?? '') ?>" required>
+                
+                <label>Badan Hukum:</label>
+                <select name="badan_hukum" required>
+                    <option value="P" <?= ($editData['badan_hukum'] ?? '') == 'P' ? 'selected' : '' ?>>PT (Perseroan Terbatas)</option>
+                    <option value="C" <?= ($editData['badan_hukum'] ?? '') == 'C' ? 'selected' : '' ?>>CV (Commanditaire Vennootschap)</option>
+                    <option value="U" <?= ($editData['badan_hukum'] ?? '') == 'U' ? 'selected' : '' ?>>UD / Perorangan</option>
+                </select>
+
+                <label>Status:</label>
+                <select name="status" required>
+                    <option value="A" <?= ($editData['status'] ?? 'A') == 'A' ? 'selected' : '' ?>>Aktif (A)</option>
+                    <option value="N" <?= ($editData['status'] ?? '') == 'N' ? 'selected' : '' ?>>Non-Aktif (N)</option>
+                </select>
+
+                <button type="submit"><?= $editData ? 'Update Vendor' : 'Simpan Vendor' ?></button>
+                <?php if ($editData): ?>
+                    <p style="text-align:center; margin-bottom:0;"><a href="vendor.php" style="color:#dc3545;">Batal Edit</a></p>
+                <?php endif; ?>
+            </form>
+        </div>
+
+        <table>
+            <tr>
+                <th>ID Vendor</th>
+                <th>Nama Vendor</th>
+                <th>Badan Hukum</th>
+                <th>Status</th>
+                <th>Aksi</th>
+            </tr>
+            <?php foreach ($daftarVendor as $row): ?>
+            <tr>
+                <td><?= $row['Vendor ID'] ?? $row['idvendor'] ?></td>
+                <td><?= htmlspecialchars($row['Company'] ?? $row['nama_vendor']) ?></td>
+                <td><?= htmlspecialchars($row['Badan Hukum'] ?? $row['badan_hukum']) ?></td>
+                <td><?= htmlspecialchars($row['Status'] ?? $row['status']) ?></td>
+                <td class="aksi">
+                    <?php $idRow = $row['Vendor ID'] ?? $row['idvendor']; ?>
+                    <a href="?edit=<?= $idRow ?>" class="edit">Edit</a> | 
+                    <a href="?delete=<?= $idRow ?>" class="delete" onclick="return confirm('Yakin hapus vendor ini?')">Delete</a>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        </table>
+    </div>
+
 </body>
 </html>

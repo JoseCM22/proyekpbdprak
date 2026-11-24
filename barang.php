@@ -1,87 +1,119 @@
 <?php
-require 'dbconnection.php';
+include_once("bootstrap.php");
 
-if (isset($_GET['delete'])) {
-    $stmt = $pdo->prepare("DELETE FROM barang WHERE idbarang = ?");
-    $stmt->execute([$_GET['delete']]);
-    header("Location: barang.php"); exit;
-}
+try {
+    $db = new DBconnection();
+    $barangModel = new BarangModel($db);
+    $satuanModel = new SatuanModel($db);
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $jenis = $_POST['jenis'];
-    $nama = $_POST['nama'];
-    $satuan = $_POST['idsatuan'];
-    $status = $_POST['status'];
-    $harga = $_POST['harga'];
-    
-    if (!empty($_POST['idbarang'])) {
-        $stmt = $pdo->prepare("UPDATE barang SET jenis=?, nama=?, idsatuan=?, status=?, harga=? WHERE idbarang=?");
-        $stmt->execute([$jenis, $nama, $satuan, $status, $harga, $_POST['idbarang']]);
-    } else {
-        $stmt = $pdo->prepare("INSERT INTO barang (jenis, nama, idsatuan, status, harga) VALUES (?, ?, ?, ?, ?)");
-        $stmt->execute([$jenis, $nama, $satuan, $status, $harga]);
+    if (isset($_GET['delete'])) {
+        $res = $barangModel->delete((int) $_GET['delete']);
+        Flash::set($res->status ? "Barang berhasil dihapus." : "Gagal: " . $res->message, $res->status ? 'success' : 'error');
+        header("Location: barang.php"); exit;
     }
-    header("Location: barang.php"); exit;
-}
 
-$editData = null;
-if (isset($_GET['edit'])) {
-    $stmt = $pdo->prepare("SELECT * FROM barang WHERE idbarang = ?");
-    $stmt->execute([$_GET['edit']]);
-    $editData = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $id = $_POST['idbarang'] ?? '';
+        $res = !empty($id) 
+            ? $barangModel->update((int) $id, $_POST) 
+            : $barangModel->insert($_POST);
+
+        Flash::set($res->status ? "Data barang berhasil disimpan." : "Gagal: " . $res->message, $res->status ? 'success' : 'error');
+        header("Location: barang.php"); exit;
+    }
+
+    $editData     = isset($_GET['edit']) ? $barangModel->find_by_id((int) $_GET['edit']) : null;
+    $daftarBarang = $barangModel->find_all(); // Membaca dari vu_master_barang
+    $daftarSatuan = $satuanModel->find_all(); // Untuk dropdown Satuan
+
+} catch (DatabaseException $e) {
+    die("Kesalahan Sistem: " . $e->getMessage());
 }
 ?>
 <!DOCTYPE html>
 <html lang="id">
-<head><title>Barang</title><style>body{font-family:sans-serif;} table, th, td {border: 1px solid black; border-collapse: collapse; padding: 5px;}</style></head>
+<head>
+    <meta charset="UTF-8">
+    <title>Data Barang - <?= Konfigurasi::APP_NAME ?></title>
+</head>
 <body>
-    <a href="index.php">⬅ Kembali ke Dashboard</a>
-    <h2>Manajemen Barang</h2>
-    <form method="POST">
-        <input type="hidden" name="idbarang" value="<?= $editData['idbarang'] ?? '' ?>">
-        Nama: <input type="text" name="nama" value="<?= $editData['nama'] ?? '' ?>" required>
-        Jenis:
-        <select name="jenis">
-            <option value="K" <?= (isset($editData['jenis']) && $editData['jenis'] == 'K') ? 'selected' : '' ?>>Komponen (K)</option>
-            <option value="L" <?= (isset($editData['jenis']) && $editData['jenis'] == 'L') ? 'selected' : '' ?>>Laptop (L)</option>
-            <option value="E" <?= (isset($editData['jenis']) && $editData['jenis'] == 'E') ? 'selected' : '' ?>>Elektronik (E)</option>
-            <option value="H" <?= (isset($editData['jenis']) && $editData['jenis'] == 'H') ? 'selected' : '' ?>>Handphone (H)</option>
-        </select>
-        Satuan:
-        <select name="idsatuan" required>
-            <?php
-            $satStmt = $pdo->query("SELECT * FROM satuan");
-            while ($s = $satStmt->fetch(PDO::FETCH_ASSOC)) {
-                $sel = (isset($editData['idsatuan']) && $editData['idsatuan'] == $s['idsatuan']) ? 'selected' : '';
-                echo "<option value='{$s['idsatuan']}' $sel>{$s['nama_satuan']}</option>";
-            }
-            ?>
-        </select>
-        Status: 
-        <select name="status">
-            <option value="1" <?= (isset($editData['status']) && $editData['status'] == 1) ? 'selected' : '' ?>>Aktif (1)</option>
-            <option value="0" <?= (isset($editData['status']) && $editData['status'] == 0) ? 'selected' : '' ?>>Nonaktif (0)</option>
-        </select>
-        Harga: <input type="number" name="harga" value="<?= $editData['harga'] ?? '' ?>" required>
-        <button type="submit">Simpan</button>
-    </form>
-    <br>
-    <table>
-        <tr><th>ID Barang</th><th>Jenis</th><th>Nama</th><th>Satuan</th><th>Status</th><th>Harga</th><th>Aksi</th></tr>
-        <?php
-        $stmtTampil = $pdo->query("SELECT * FROM vu_master_barang");
-        while ($row = $stmtTampil->fetch(PDO::FETCH_ASSOC)) {
-            echo "<tr>
-                    <td>{$row['ID Barang']}</td>
-                    <td>{$row['Jenis']}</td>
-                    <td>{$row['Nama']}</td>
-                    <td>{$row['Satuan']}</td>
-                    <td>{$row['Status']}</td>
-                    <td>{$row['Harga']}</td>
-                    <td><a href='?edit={$row['ID Barang']}'>Edit</a> | <a href='?delete={$row['ID Barang']}'>Delete</a></td>
-                  </tr>";
-        }
-        ?>
-    </table>
+
+    <?php include_once("sidebar.php"); ?>
+
+    <div class="main-content">
+        <div class="page-header">
+            <h2>Manajemen Data Barang</h2>
+        </div>
+
+        <?php Flash::tampilkan(); ?>
+
+        <div class="card-form">
+            <form method="POST">
+                <input type="hidden" name="idbarang" value="<?= $editData['idbarang'] ?? '' ?>">
+                
+                <label>Jenis Barang:</label>
+                <select name="jenis" required>
+                    <option value="E" <?= ($editData['jenis'] ?? '') == 'E' ? 'selected' : '' ?>>Elektronik Utama (E)</option>
+                    <option value="A" <?= ($editData['jenis'] ?? '') == 'A' ? 'selected' : '' ?>>Aksesoris / Komponen (A)</option>
+                </select>
+
+                <label>Nama Barang:</label>
+                <input type="text" name="nama" value="<?= htmlspecialchars($editData['nama'] ?? '') ?>" required>
+
+                <label>Satuan:</label>
+                <select name="idsatuan" required>
+                    <option value="">-- Pilih Satuan --</option>
+                    <?php foreach ($daftarSatuan as $s): ?>
+                        <?php $sId = $s['ID Satuan'] ?? $s['idsatuan']; $sNama = $s['Nama Satuan'] ?? $s['nama_satuan']; ?>
+                        <option value="<?= $sId ?>" <?= ($editData['idsatuan'] ?? '') == $sId ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($sNama) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <label>Harga Modal / Dasar (Rp):</label>
+                <input type="number" name="harga" min="0" value="<?= $editData['harga'] ?? '' ?>" required>
+
+                <label>Status:</label>
+                <select name="status" required>
+                    <option value="1" <?= ($editData['status'] ?? 1) == 1 ? 'selected' : '' ?>>Tersedia / Aktif</option>
+                    <option value="0" <?= isset($editData['status']) && $editData['status'] == 0 ? 'selected' : '' ?>>Discontinue / Non-Aktif</option>
+                </select>
+
+                <button type="submit"><?= $editData ? 'Update Barang' : 'Simpan Barang' ?></button>
+                <?php if ($editData): ?>
+                    <p style="text-align:center; margin-bottom:0;"><a href="barang.php" style="color:#dc3545;">Batal Edit</a></p>
+                <?php endif; ?>
+            </form>
+        </div>
+
+        <table>
+            <tr>
+                <th>ID</th>
+                <th>Jenis</th>
+                <th>Nama Barang</th>
+                <th>Satuan</th>
+                <th>Status</th>
+                <th>Harga</th>
+                <th>Aksi</th>
+            </tr>
+            <?php foreach ($daftarBarang as $row): ?>
+            <tr>
+                <td><?= $row['ID Barang'] ?? $row['idbarang'] ?></td>
+                <td><?= htmlspecialchars($row['Jenis'] ?? $row['jenis']) ?></td>
+                <td><?= htmlspecialchars($row['Nama'] ?? $row['nama']) ?></td>
+                <td><?= htmlspecialchars($row['Satuan'] ?? $row['nama_satuan'] ?? '-') ?></td>
+                <td><?= $row['Status'] ?? ($row['status'] == 1 ? 'Aktif' : 'Non-Aktif') ?></td>
+                <td>Rp <?= number_format($row['Harga'] ?? $row['harga'], 0, ',', '.') ?></td>
+                <td class="aksi">
+                    <?php $idRow = $row['ID Barang'] ?? $row['idbarang']; ?>
+                    <a href="?edit=<?= $idRow ?>" class="edit">Edit</a> | 
+                    <a href="?delete=<?= $idRow ?>" class="delete" onclick="return confirm('Yakin hapus barang ini?')">Delete</a>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        </table>
+    </div>
+
 </body>
 </html>
