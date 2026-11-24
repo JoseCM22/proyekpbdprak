@@ -8,10 +8,10 @@ class KartuStokModel extends BaseModel {
     }
 
     public function insert(array $data): Respon {
-        return new Respon(false, "Kartu stok diisi otomatis oleh sistem/trigger.");
+        return new Respon(false, "Kartu stok diisi otomatis oleh trigger transaksi.");
     }
 
     public function update(int $id, array $data): Respon {
-        return new Respon(false, "Riwayat kartu stok tidak boleh diubah.");
+        return new Respon(false, "Riwayat mutasi kartu stok tidak boleh diubah.");
     }
-}   
+}

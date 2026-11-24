@@ -4,7 +4,7 @@ include_once("bootstrap.php");
 try {
     $db = new DBconnection();
     $kartuStokModel = new KartuStokModel($db);
-    $daftarMutasi   = $kartuStokModel->find_all();
+    $daftarMutasi   = $kartuStokModel->find_all(); // Membaca dari vu_laporan_kartu_stok
 } catch (DatabaseException $e) {
     die("Kesalahan Sistem: " . $e->getMessage());
 }
@@ -20,7 +20,7 @@ try {
     <div class="main-content">
         <div class="page-header">
             <h2>Laporan Mutasi Kartu Stok</h2>
-            <p style="margin:5px 0 0; color:#6c757d; font-size:14px;">Riwayat pergerakan barang masuk dan keluar (Read-Only).</p>
+            <p style="margin:5px 0 0; color:#6c757d; font-size:14px;">Riwayat pergerakan barang masuk & keluar yang dicatat otomatis oleh Trigger database.</p>
         </div>
 
         <table>
@@ -28,21 +28,23 @@ try {
                 <th>ID Log</th>
                 <th>Waktu</th>
                 <th>Nama Barang</th>
-                <th>Jenis Transaksi</th>
-                <th>ID Ref. Transaksi</th>
+                <th>Satuan</th>
+                <th>Jenis Mutasi</th>
+                <th>Ref. Transaksi</th>
                 <th>Masuk</th>
                 <th>Keluar</th>
-                <th>Sisa Stok</th>
+                <th>Saldo Stok</th>
             </tr>
             <?php if (empty($daftarMutasi)): ?>
-                <tr><td colspan="8" style="text-align:center; color:#6c757d;">Belum ada riwayat mutasi di tabel kartu_stok.</td></tr>
+                <tr><td colspan="9" style="text-align:center; color:#6c757d;">Belum ada mutasi stok yang tercatat.</td></tr>
             <?php else: ?>
                 <?php foreach ($daftarMutasi as $row): ?>
                 <tr>
                     <td><?= $row['idkartu_stok'] ?></td>
                     <td><?= $row['created_at'] ?></td>
                     <td><?= htmlspecialchars($row['nama_barang']) ?></td>
-                    <td><?= $row['jenis_transaksi'] == 'M' ? 'Masuk (M)' : 'Keluar (K)' ?></td>
+                    <td><?= htmlspecialchars($row['nama_satuan']) ?></td>
+                    <td><?= htmlspecialchars($row['jenis_ket']) ?></td>
                     <td>#<?= $row['idtransaksi'] ?></td>
                     <td style="color:#198754; font-weight:bold;">+<?= $row['masuk'] ?></td>
                     <td style="color:#dc3545; font-weight:bold;">-<?= $row['keluar'] ?></td>

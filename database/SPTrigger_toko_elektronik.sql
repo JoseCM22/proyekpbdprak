@@ -31,7 +31,3 @@ BEGIN
 	;
 END $$
 delimiter ;
-
--- stored procedure
-delimiter $$
-CREATE PROCEDURE p_

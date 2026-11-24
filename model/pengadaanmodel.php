@@ -6,7 +6,12 @@ class PengadaanModel extends BaseModel {
         $this->view        = 'vu_transaksi_pengadaan';
         $this->primary_key = 'idpengadaan';
     }
-
+    // Mengambil data langsung dari Base Table (aman untuk isi dropdown <select>)
+    public function find_all_raw(): array {
+        $respon = $this->db->send_query("SELECT * FROM {$this->tabel}");
+        return $respon->data;
+    }
+    // Membuat Header Nota PO baru
     public function insert(array $data): Respon {
         return $this->db->send_query(
             "INSERT INTO pengadaan (`timestamp`, user_iduser, `status`, vendor_idvendor, subtotal_nilai, ppn, total_nilai) 
@@ -15,6 +20,7 @@ class PengadaanModel extends BaseModel {
         );
     }
 
+    // Ubah Status PO (misal: Pending -> Selesai / Batal)
     public function update(int $id, array $data): Respon {
         return $this->db->send_query(
             "UPDATE pengadaan SET `status` = ? WHERE idpengadaan = ?",
@@ -22,25 +28,31 @@ class PengadaanModel extends BaseModel {
         );
     }
 
-    // Method tambahan untuk detail pengadaan
+    // Read Detail Item dari SQL View
     public function get_detail(int $idpengadaan): array {
-        $sql = "SELECT dp.*, b.nama AS nama_barang, s.nama_satuan 
-                FROM detail_pengadaan dp
-                JOIN barang b ON dp.idbarang = b.idbarang
-                JOIN satuan s ON b.idsatuan = s.idsatuan
-                WHERE dp.idpengadaan = ?";
-        return $this->db->send_query($sql, [$idpengadaan])->data;
+        return $this->db->send_query(
+            "SELECT * FROM vu_detail_pengadaan WHERE idpengadaan = ?",
+            [$idpengadaan]
+        )->data;
     }
 
+    // Insert Detail Item via Stored Procedure (Harga otomatis dari Function)
     public function insert_detail(array $data): Respon {
-        $harga  = (int) $data['harga_satuan'];
-        $jumlah = (int) $data['jumlah'];
-        $sub    = $harga * $jumlah; // Sementara dihitung di PHP sebelum di-upgrade ke Trigger
-
         return $this->db->send_query(
-            "INSERT INTO detail_pengadaan (harga_satuan, jumlah, sub_total, idbarang, idpengadaan) 
-             VALUES (?, ?, ?, ?, ?)",
-            [$harga, $jumlah, $sub, (int) $data['idbarang'], (int) $data['idpengadaan']]
+            "CALL sp_tambah_detail_pengadaan(?, ?, ?)",
+            [
+                (int) $data['idpengadaan'],
+                (int) $data['idbarang'],
+                (int) $data['jumlah']
+            ]
+        );
+    }
+
+    // Hapus satu baris item detail (otomatis memicu trigger hitung ulang total PO)
+    public function delete_detail(int $iddetail_pengadaan): Respon {
+        return $this->db->send_query(
+            "DELETE FROM detail_pengadaan WHERE iddetail_pengadaan = ?",
+            [$iddetail_pengadaan]
         );
     }
 }

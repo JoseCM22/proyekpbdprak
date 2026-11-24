@@ -15,6 +15,12 @@ abstract class BaseModel implements Crudable {
         return $respon->data;
     }
 
+    // Mengambil data langsung dari Base Table (aman untuk isi dropdown <select>)
+    public function find_all_raw(): array {
+        $respon = $this->db->send_query("SELECT * FROM {$this->tabel}");
+        return $respon->data;
+    }
+
     public function find_by_id(int $id): ?array {
         $respon = $this->db->send_query(
             "SELECT * FROM {$this->tabel} WHERE {$this->primary_key} = ?",

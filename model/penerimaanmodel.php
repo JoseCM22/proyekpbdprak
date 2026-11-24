@@ -22,22 +22,35 @@ class PenerimaanModel extends BaseModel {
     }
 
     public function get_detail(int $idpenerimaan): array {
-        $sql = "SELECT dpr.*, b.nama AS nama_barang 
-                FROM detail_penerimaan dpr
-                JOIN barang b ON dpr.barang_idbarang = b.idbarang
-                WHERE dpr.idpenerimaan = ?";
-        return $this->db->send_query($sql, [$idpenerimaan])->data;
+        return $this->db->send_query(
+            "SELECT * FROM vu_detail_penerimaan WHERE idpenerimaan = ?",
+            [$idpenerimaan]
+        )->data;
     }
 
     public function insert_detail(array $data): Respon {
-        $harga  = (int) $data['harga_satuan_terima'];
-        $jumlah = (int) $data['jumlah_terima'];
-        $sub    = $harga * $jumlah;
-
         return $this->db->send_query(
-            "INSERT INTO detail_penerimaan (idpenerimaan, barang_idbarang, jumlah_terima, harga_satuan_terima, sub_total_terima) 
-             VALUES (?, ?, ?, ?, ?)",
-            [(int) $data['idpenerimaan'], (int) $data['barang_idbarang'], $jumlah, $harga, $sub]
+            "CALL sp_tambah_detail_penerimaan(?, ?, ?, ?)",
+            [
+                (int) $data['idpenerimaan'],
+                (int) $data['barang_idbarang'],
+                (int) $data['jumlah_terima'],
+                (int) ($data['harga_satuan_terima'] ?? 0)
+            ]
         );
+    }
+
+    public function delete_detail(int $iddetail_penerimaan): Respon {
+        return $this->db->send_query(
+            "DELETE FROM detail_penerimaan WHERE iddetail_penerimaan = ?",
+            [$iddetail_penerimaan]
+        );
+    }
+
+    public function get_barang_by_penerimaan(int $idpenerimaan): array {
+        return $this->db->send_query(
+            "CALL sp_opsi_barang_penerimaan(?)",
+            [$idpenerimaan]
+        )->data;
     }
 }
